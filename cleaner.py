@@ -1,6 +1,7 @@
 import re
 pattern_sid = r'[ABMabm]\d{7}\d+'
 pattern_class = r'[四二]\S{2}[一二三四甲乙丙]'
+pattern_class1 =  r'[四二]\S{}[一二三四甲乙丙]'
 pattern_continuespace = r'\s+'
 pattern_symbol = r'[!@/#$%^&*()_+=\"\'<>?;:\{\}『…』「」“〃,`~\\|,（）：–.]'
 pattern_eng = r'[a-z]+'
@@ -41,7 +42,11 @@ text = text.replace('行銷資料科學',"")
 text = text.replace('孟彥','')
 text = text.replace('學號','')
 text = text.replace('黃丹禕','')
+text = text.replace('廖靜芸','')
 text = text.replace('潔思','')
+text = text.replace('方聖瑋','')
 text = text.replace('0','')
 
-print(text)
+with open('mds.txt','w') as f:
+    f.write(text)
+print('done')
