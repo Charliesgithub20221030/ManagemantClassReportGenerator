@@ -29,9 +29,6 @@ for i,path in enumerate(filepaths):
     if len(text)!=0:
         texts.append(text)
 
-df = pd.DataFrame(texts,columns = ['document'])
-df.to_csv('./extracted/extectedText.csv')
-
 
 texts = [t.replace('\n','').replace(' ','') for t in texts if len(t)>0]
 count = 0
