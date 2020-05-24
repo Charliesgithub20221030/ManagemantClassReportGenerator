@@ -1,4 +1,5 @@
 import tensorflow as tf
+import os
 import numpy as np
 
 class DataLoader():
@@ -105,7 +106,7 @@ def run_train(chinese=False):
     model.save('pretrain_rnn.SavedModel', save_format='tf')
 
 
-def generating(chinese=False):
+def generating(chinese=False,num_word=400):
     # generating by temperature
 
     num_batchs = 1000
@@ -121,13 +122,43 @@ def generating(chinese=False):
     model.load('pretrain_rnn.SavedModel')
 
     x_, _ = data_loader.get_batch(seq_length, 1)
-    for diversity in [.7, 1.0, 1.2, 1.4]:
+    result = ''
+    for diversity in [1.2]:#[.7, 1.0, 1.2, 1.4]:
         x = x_
         print('diversity %f' % diversity)
 
-        for t in range(400):
+        for t in range(num_word):
             y_pred = model.predict(x, diversity)
-            print(data_loader.indices_word[y_pred[0]], end=' ', flush=True)
+            result+=data_loader.indices_word[y_pred[0]]+' '
             x = np.concatenate(
                 [x[:, 1:], np.expand_dims(y_pred, axis=1)], axis=-1)
-        print()
+    return result
+
+def get_model():
+    num_batchs = 1000
+    seq_length = 40
+    batch_size = 50
+    learning_rate = 1e-3
+
+    data_loader = DataLoader(True)
+
+    model1 = RNN(num_chars=len(data_loader.words),
+                batch_size=batch_size,
+                seq_length=seq_length)
+    model2 = RNN(num_chars=len(data_loader.words),
+                batch_size=batch_size,
+                seq_length=seq_length)
+
+
+    model1.load('pretrain_rnn.SavedModel')
+    model2.load('pretrain_rnn.SavedModel')
+    return model1,model2 
+
+
+nword = input('num of word:(x50)')
+fn = input('output file name: ')
+result = generating(True, int(nword))
+if not os.path.isdir('generated'):
+    os.mkdir('generated')
+with open('./generated/'+fn+'.txt','w') as f:
+    f.write(result)
