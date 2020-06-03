@@ -1,9 +1,9 @@
 import tensorflow as tf
-import os
 import numpy as np
 
+
 class DataLoader():
-    def __init__(self, chinese):
+    def __init__(self, chinese, char):
         path = tf.keras.utils.get_file('nietzsche.txt',
                                        origin='https://s3.amazonaws.com/text-datasets/nietzsche.txt')
         if chinese:
@@ -25,8 +25,13 @@ class DataLoader():
                 .replace('\n', ' ')\
                 .replace('，', ' ')\
                 .replace('。', ' ')\
-                .replace('?', '')\
-                .split(' ')
+                .replace('?', '')
+
+            if char:
+                self.raw_text = list(self.raw_text.replace(' ', ''))
+            else:
+                self.raw_text = self.raw_text.split(' ')
+
         self.raw_text = [w for w in self.raw_text if w != '']
         self.words = sorted(list(set([
             w
@@ -47,15 +52,35 @@ class DataLoader():
         return np.array(seq), np.array(next_word)
 
 
+class Attention(tf.keras.Model):
+    def __init__(self, units):
+        super(Attention, self).__init__()
+        self.w1 = tf.keras.layers.Dense(units)
+        self.w2 = tf.keras.layers.Dense(units)
+        self.v = tf.keras.layers.Dense(1)
+
+    def call(self, q, value):
+        hidden_with_time_axis = tf.expand_dims(q, 1)
+        score = self.v(tf.nn.tanh(
+            self.w1(value)+self.w2(hidden_with_time_axis)))
+
+        attention_weights = tf.nn.softmax(score, axis=1)
+        context_vec = attention_weights*value
+        context_vec = tf.reduce_sum(context_vec, axis=1)
+
+        return context_vec, attention_weights
+
+
 class RNN(tf.keras.Model):
     def __init__(self, num_chars, batch_size, seq_length):
         super().__init__()
         self.num_chars = num_chars
         self.batch_size = batch_size
         self.seq_length = seq_length
-        self.cell = tf.keras.layers.LSTMCell(256)
+        self.cell = tf.keras.layers.GRUCell(256)
         self.dense = tf.keras.layers.Dense(self.num_chars)
 
+    @tf.function
     def call(self, inputs, from_logits=False):
         inputs = tf.one_hot(inputs, depth=self.num_chars)
         state = self.cell.get_initial_state(
@@ -74,19 +99,20 @@ class RNN(tf.keras.Model):
         logits = self(inputs, from_logits=True)
         prob = tf.nn.softmax(logits/temperature).numpy()
         return np.array([np.random.choice(self.num_chars, p=prob[i, :]) for i in range(batch_size.numpy())])
+        # return np.array([tf.argmax(prob[i, :]) for i in range(batch_size.numpy())])
 
     def load(self, filename):
         self = tf.saved_model.load(filename)
 
 
-def run_train(chinese=False):
+def run_train(chinese=False, char=True):
     # training
     num_batchs = 1000
     seq_length = 40
     batch_size = 50
     learning_rate = 1e-3
 
-    data_loader = DataLoader(chinese)
+    data_loader = DataLoader(chinese, char)
 
     model = RNN(num_chars=len(data_loader.words),
                 batch_size=batch_size,
@@ -103,62 +129,43 @@ def run_train(chinese=False):
             print("batch %d: loss %f" % (batch_index, loss.numpy()))
         grads = tape.gradient(loss, model.variables)
         optimizer.apply_gradients(grads_and_vars=zip(grads, model.variables))
-    model.save('pretrain_rnn.SavedModel', save_format='tf')
+    model.save('reportGeneratorModels/SavedModel', save_format='tf')
 
 
-def generating(chinese=False,num_word=400):
+def generating(file=True, chinese=False,):
     # generating by temperature
+    file = True
+    chinese = True
+    char = False
 
     num_batchs = 1000
     seq_length = 40
     batch_size = 50
     learning_rate = 1e-3
 
-    data_loader = DataLoader(chinese)
+    data_loader = DataLoader(chinese, char)
 
     model = RNN(num_chars=len(data_loader.words),
                 batch_size=batch_size,
                 seq_length=seq_length)
-    model.load('pretrain_rnn.SavedModel')
+    model.load('reportGeneratorModels/SavedModel')
 
+    output_text = []
     x_, _ = data_loader.get_batch(seq_length, 1)
-    result = ''
-    for diversity in [1.2]:#[.7, 1.0, 1.2, 1.4]:
+    for diversity in [1.0, 1.2]:
+        text_for_div = ""
         x = x_
-        print('diversity %f' % diversity)
 
-        for t in range(num_word):
+        for t in range(400):  # words per temperature
             y_pred = model.predict(x, diversity)
-            result+=data_loader.indices_word[y_pred[0]]+' '
+            word = data_loader.indices_word[y_pred[0]]
+            # print(word)
+            text_for_div += word
             x = np.concatenate(
                 [x[:, 1:], np.expand_dims(y_pred, axis=1)], axis=-1)
-    return result
-
-def get_model():
-    num_batchs = 1000
-    seq_length = 40
-    batch_size = 50
-    learning_rate = 1e-3
-
-    data_loader = DataLoader(True)
-
-    model1 = RNN(num_chars=len(data_loader.words),
-                batch_size=batch_size,
-                seq_length=seq_length)
-    model2 = RNN(num_chars=len(data_loader.words),
-                batch_size=batch_size,
-                seq_length=seq_length)
-
-
-    model1.load('pretrain_rnn.SavedModel')
-    model2.load('pretrain_rnn.SavedModel')
-    return model1,model2 
-
-
-nword = input('num of word:(x50)')
-fn = input('output file name: ')
-result = generating(True, int(nword))
-if not os.path.isdir('generated'):
-    os.mkdir('generated')
-with open('./generated/'+fn+'.txt','w') as f:
-    f.write(result)
+            print('next x', x)
+        output_text.append(text_for_div)
+    print(output_text)
+    if file:
+        with open('generated_output.txt', 'w') as f:
+            f.writelines('\n'.join(output_text))

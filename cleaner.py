@@ -10,7 +10,7 @@ pattern_other = r'企管\S*'
 
 
 ner_filter = ['CARDINAL','PERSON','ORG']
-
+#'[+_)(*&^%$#@!~`=)]'
 
 
 with open('output.txt','r') as f:
