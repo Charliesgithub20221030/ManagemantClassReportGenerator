@@ -1,7 +1,10 @@
+from sklearn.metrics.pairwise import cosine_similarity as cos
 from tensorflow.compat import v1 as tf
 import modeling
 import tokenization
+from opencc import OpenCC
 tf.disable_eager_execution()
+cc = OpenCC('t2s')
 # # Paremeters
 bert_config_file = 'albert_tiny/albert_config_tiny.json'
 init_checkpoint = "albert_tiny/albert_model.ckpt"
@@ -222,7 +225,10 @@ def create_examples(line):
         guid = "%s-%s" % (set_type, 0)
         label = tokenization.convert_to_unicode(line[0])
         text_a = tokenization.convert_to_unicode(line[1])
-        text_b = tokenization.convert_to_unicode(line[2])
+        if len(line) > 2:
+            text_b = tokenization.convert_to_unicode(line[2])
+        else:
+            text_b = None
 
         example = [
             InputExample(guid=guid, text_a=text_a,
@@ -240,6 +246,8 @@ def get_output(line='0,你好,我很好'):
     # If you want to use the token-level output, use model.get_sequence_output()
     # instead.
 
+    line = cc.convert(line)
+    tf.reset_default_graph()
     examples = create_examples(line)
     feature = convert_single_example(example=examples[0],
                                      label_list=label_list,
@@ -377,5 +385,10 @@ def get_output(line='0,你好,我很好'):
 
 
 # (loss, per_example_loss, logits, probabilities) = get_output()
-logit, hidden = get_output()
-print(hidden.shape)
+logit1, hidden1 = get_output('0,不')
+logit2, hidden2 = get_output('0,摩羯座')
+logit3, hidden3 = get_output('0,天蠍座')
+
+print("1 to 2", cos(hidden1, hidden2))
+print('2 to 3', cos(hidden2, hidden3))
+print('1 to 3', cos(hidden1, hidden3))
